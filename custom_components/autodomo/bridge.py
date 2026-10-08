@@ -274,6 +274,16 @@ class AutodomoBridge:
 
     # ----- presenca -----
 
+    async def _reconcile_unpublished(self) -> None:
+        """Entidade escolhida que ja' tem estado mas ainda nao tem device (apareceu
+        na janela entre a foto inicial e a assinatura de eventos) - publica agora."""
+        for entity_id in self.entity_ids - self._published:
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                continue
+            if await self._publish_device(entity_id, state):
+                await self.client.put(self._state_path(device_id_for(entity_id)), state_payload(state, _now_ms()))
+
     async def _heartbeat_loop(self) -> None:
         info = {"type": "homeassistant", "version": HA_VERSION, "platform": "ha"}
         first = True
@@ -284,6 +294,7 @@ class AutodomoBridge:
                     payload["info"] = info
                 await self.client.patch(self._bridge_path(), payload)
                 first = False
+                await self._reconcile_unpublished()
             except FirebaseAuthError as err:
                 self._on_auth_failed(err)
                 return
