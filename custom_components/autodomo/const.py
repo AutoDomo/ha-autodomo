@@ -23,9 +23,11 @@ CONF_FUNCTIONS_URL = "functions_url"
 CONF_API_KEY = "api_key"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_AUTH_EMULATOR_HOST = "auth_emulator_host"
+CONF_ADVANCED = "advanced"
 
 # Opcoes.
 CONF_ENTITIES = "entities"
+CONF_AUTO_ADD = "auto_add"
 
 # Dominios do HA que a ponte sabe publicar (= kinds do contrato).
 SUPPORTED_DOMAINS: tuple[str, ...] = (
@@ -42,8 +44,15 @@ SUPPORTED_DOMAINS: tuple[str, ...] = (
     "button",
 )
 
+# Pre-selecionados na instalacao e cobertos pelo "expor automaticamente":
+# o que a pessoa controla. Sensores ficam de fora por padrao (costumam ser
+# dezenas de entidades de sistema).
+AUTO_DOMAINS: tuple[str, ...] = ("light", "switch", "cover", "climate", "lock", "fan")
+
 STATE_DEBOUNCE_S = 0.3
 HEARTBEAT_INTERVAL_S = 30
 COMMAND_MAX_AGE_S = 30
 STREAM_RETRY_MIN_S = 2
 STREAM_RETRY_MAX_S = 60
+
+ISSUE_MISSING_ENTITY = "missing_entity"

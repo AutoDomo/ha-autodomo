@@ -13,6 +13,7 @@ from .bridge import AutodomoBridge
 from .const import (
     CONF_API_KEY,
     CONF_AUTH_EMULATOR_HOST,
+    CONF_AUTO_ADD,
     CONF_BRIDGE_ID,
     CONF_DATABASE_URL,
     CONF_ENTITIES,
@@ -43,10 +44,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: AutodomoConfigEntry) -> 
 
     bridge = AutodomoBridge(
         hass,
+        entry,
         client,
         home_id=entry.data[CONF_HOME_ID],
         bridge_id=entry.data[CONF_BRIDGE_ID],
         entity_ids=set(entry.options.get(CONF_ENTITIES, [])),
+        auto_add=bool(entry.options.get(CONF_AUTO_ADD, False)),
     )
     try:
         await bridge.async_start()
