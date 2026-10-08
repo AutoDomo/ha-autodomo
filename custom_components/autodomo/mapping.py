@@ -9,18 +9,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.const import (
-    ATTR_SUPPORTED_FEATURES,
-    STATE_CLOSED,
-    STATE_CLOSING,
-    STATE_LOCKED,
-    STATE_ON,
-    STATE_OPEN,
-    STATE_OPENING,
-    STATE_UNAVAILABLE,
-    STATE_UNKNOWN,
-)
+from homeassistant.const import ATTR_SUPPORTED_FEATURES, STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
+
+# Estados de cover/lock sairam de homeassistant.const (HA 2025+; viraram
+# CoverState/LockState nas plataformas) - literais evitam depender da versao.
+COVER_STATES = ("open", "closed", "opening", "closing")
+STATE_LOCKED = "locked"
 
 # Chaves do RTDB nao aceitam . # $ [ ] /
 def device_id_for(entity_id: str) -> str:
@@ -137,7 +132,7 @@ def state_payload(state: State, ts_ms: int) -> dict[str, Any]:
         if attrs.get("color_temp_kelvin"):
             out["color_temp"] = int(attrs["color_temp_kelvin"])
     elif kind == "cover":
-        out["state"] = state.state if state.state in (STATE_OPEN, STATE_CLOSED, STATE_OPENING, STATE_CLOSING) else "unknown"
+        out["state"] = state.state if state.state in COVER_STATES else "unknown"
         if attrs.get("current_position") is not None:
             out["position"] = int(attrs["current_position"])
         if attrs.get("current_tilt_position") is not None:

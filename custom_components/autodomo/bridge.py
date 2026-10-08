@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import partial
 import logging
 import random
 import time
@@ -48,6 +49,7 @@ class AutodomoBridge:
         self.bridge_id = bridge_id
         self.entity_ids = set(entity_ids)
         self.auth_failed = False
+        self._published: set[str] = set()  # entidades cujo devices/{id} ja' foi escrito
 
         self._unsub_state: CALLBACK_TYPE | None = None
         self._debounce: dict[str, CALLBACK_TYPE] = {}
@@ -116,22 +118,27 @@ class AutodomoBridge:
         updates: dict[str, Any] = {}
         wanted: set[str] = set()
         for entity_id in sorted(self.entity_ids):
+            did = device_id_for(entity_id)
+            wanted.add(did)  # mesmo sem estado ainda: nao e' pra apagar
             state = self.hass.states.get(entity_id)
             if state is None:
-                _LOGGER.warning("entidade %s nao existe - ignorada", entity_id)
+                # Entidades de MQTT/discovery podem aparecer depois do boot -
+                # publica quando o primeiro estado chegar (_push_state).
+                _LOGGER.debug("entidade %s ainda nao existe - publica quando aparecer", entity_id)
                 continue
             payload = device_payload(state, self._room_for(entity_id))
             if payload is None:
                 _LOGGER.warning("entidade %s de dominio nao suportado - ignorada", entity_id)
                 continue
             payload["bridge"] = self.bridge_id
-            did = device_id_for(entity_id)
-            wanted.add(did)
             updates[did] = payload
+            self._published.add(entity_id)
 
         # Devices desta ponte que ja' estao no servidor e nao foram mais escolhidos.
         try:
-            existing = await self.client.get(f'{self._devices_path()}?orderBy="bridge"&equalTo="{self.bridge_id}"')
+            existing = await self.client.get(
+                self._devices_path(), query={"orderBy": '"bridge"', "equalTo": f'"{self.bridge_id}"'}
+            )
         except FirebaseError as err:
             _LOGGER.debug("nao deu pra listar devices existentes: %s", err)
             existing = None
@@ -140,22 +147,40 @@ class AutodomoBridge:
         if updates:
             await self.client.patch(self._devices_path(), updates)
         for did in stale:
-            await self.client.delete(f"{self._devices_path()}/{did}")
+            # state antes do device: a regra de state exige que o device exista
             await self.client.delete(self._state_path(did))
+            await self.client.delete(f"{self._devices_path()}/{did}")
         if stale:
             _LOGGER.info("%d dispositivo(s) removido(s) do app", len(stale))
 
     # ----- state -----
 
     async def _publish_all_states(self) -> None:
+        """Estado inicial de tudo que ja' existe. Entidade que apareceu entre o
+        _publish_devices e aqui (discovery MQTT no boot) ganha o device agora -
+        state/{id} sem devices/{id} e' negado pelas regras e derruba o PATCH todo."""
         updates: dict[str, Any] = {}
         ts = _now_ms()
         for entity_id in self.entity_ids:
             state = self.hass.states.get(entity_id)
-            if state is not None:
-                updates[device_id_for(entity_id)] = state_payload(state, ts)
+            if state is None:
+                continue
+            if entity_id not in self._published and not await self._publish_device(entity_id, state):
+                continue
+            updates[device_id_for(entity_id)] = state_payload(state, ts)
         if updates:
             await self.client.patch(f"homes/{self.home_id}/state", updates)
+
+    async def _publish_device(self, entity_id: str, state: Any) -> bool:
+        payload = device_payload(state, self._room_for(entity_id))
+        if payload is None:
+            _LOGGER.warning("entidade %s de dominio nao suportado - ignorada", entity_id)
+            return False
+        payload["bridge"] = self.bridge_id
+        await self.client.put(f"{self._devices_path()}/{device_id_for(entity_id)}", payload)
+        self._published.add(entity_id)
+        _LOGGER.info("dispositivo %s publicado", entity_id)
+        return True
 
     @callback
     def _on_state_changed(self, event: Event[EventStateChangedData]) -> None:
@@ -166,9 +191,11 @@ class AutodomoBridge:
         # viram uma escrita a cada 300 ms.
         if cancel := self._debounce.pop(entity_id, None):
             cancel()
-        self._debounce[entity_id] = async_call_later(
-            self.hass, STATE_DEBOUNCE_S, lambda _now, eid=entity_id: self.hass.async_create_task(self._push_state(eid))
-        )
+        # Corrotina (via partial): o HA agenda no loop. Funcao comum iria pro executor.
+        self._debounce[entity_id] = async_call_later(self.hass, STATE_DEBOUNCE_S, partial(self._push_state_later, entity_id))
+
+    async def _push_state_later(self, entity_id: str, _now: Any) -> None:
+        await self._push_state(entity_id)
 
     async def _push_state(self, entity_id: str) -> None:
         self._debounce.pop(entity_id, None)
@@ -176,9 +203,11 @@ class AutodomoBridge:
         if state is None:
             return
         try:
+            if entity_id not in self._published and not await self._publish_device(entity_id, state):
+                return
             await self.client.put(self._state_path(device_id_for(entity_id)), state_payload(state, _now_ms()))
-        except FirebaseAuthError:
-            self._on_auth_failed()
+        except FirebaseAuthError as err:
+            self._on_auth_failed(err)
         except FirebaseError as err:
             _LOGGER.warning("falha ao publicar estado de %s: %s", entity_id, err)
 
@@ -191,8 +220,7 @@ class AutodomoBridge:
                 await self.client.stream(self._commands_path(), self._on_command_event)
                 delay = STREAM_RETRY_MIN_S
             except FirebaseAuthError as err:
-                _LOGGER.error("ponte nao autorizada (%s) - revogada no app? Remova e pareie de novo.", err)
-                self._on_auth_failed()
+                self._on_auth_failed(err)
                 return
             except FirebaseError as err:
                 _LOGGER.debug("stream de comandos caiu (%s), reconectando em %ss", err, delay)
@@ -256,8 +284,8 @@ class AutodomoBridge:
                     payload["info"] = info
                 await self.client.patch(self._bridge_path(), payload)
                 first = False
-            except FirebaseAuthError:
-                self._on_auth_failed()
+            except FirebaseAuthError as err:
+                self._on_auth_failed(err)
                 return
             except FirebaseError as err:
                 _LOGGER.debug("heartbeat falhou: %s", err)
@@ -265,7 +293,11 @@ class AutodomoBridge:
                 raise
             await asyncio.sleep(HEARTBEAT_INTERVAL_S)
 
-    def _on_auth_failed(self) -> None:
+    def _on_auth_failed(self, err: Exception | None = None) -> None:
         if not self.auth_failed:
             self.auth_failed = True
-            _LOGGER.error("a ponte foi revogada ou o token expirou - remova a integracao e pareie de novo pelo app")
+            _LOGGER.error(
+                "acesso negado pelo AutoDomo (%s) - ponte revogada no app ou dado rejeitado pelas regras; "
+                "se foi revogada, remova a integracao e pareie de novo",
+                err,
+            )

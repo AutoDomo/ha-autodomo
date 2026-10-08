@@ -157,8 +157,10 @@ class FirebaseClient:
         params["auth"] = await self.token()
         return f"{self._db_base}/{path.strip('/')}.json", params
 
-    async def _request(self, method: str, path: str, data: Any = None) -> Any:
+    async def _request(self, method: str, path: str, data: Any = None, query: dict[str, str] | None = None) -> Any:
         url, params = await self._db_url(path)
+        if query:
+            params.update(query)
         try:
             async with self._session.request(
                 method,
@@ -168,19 +170,28 @@ class FirebaseClient:
                 headers={"Content-Type": "application/json"},
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
-                if resp.status == 401:
-                    raise FirebaseAuthError("RTDB: nao autorizado (ponte revogada?)")
                 if resp.status >= 400:
                     text = await resp.text()
+                    if resp.status == 401:
+                        # 401 tanto pra ponte revogada quanto pra dado que falha no
+                        # .validate das regras - o corpo e o caminho dizem qual.
+                        raise FirebaseAuthError(
+                            f"RTDB {method} {path}: nao autorizado ({text[:160]}) - ponte revogada ou dado rejeitado pelas regras"
+                        )
                     raise FirebaseError(f"RTDB {method} {path}: {resp.status} {text[:200]}")
                 if method == "DELETE":
                     return None
-                return await resp.json(content_type=None)
+                text = await resp.text()
+                try:
+                    return json.loads(text) if text.strip() else None
+                except json.JSONDecodeError as err:
+                    raise FirebaseError(f"RTDB {method} {path}: resposta nao-JSON: {text[:120]}") from err
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise FirebaseError(f"RTDB {method} {path}: {err}") from err
 
-    async def get(self, path: str) -> Any:
-        return await self._request("GET", path)
+    async def get(self, path: str, query: dict[str, str] | None = None) -> Any:
+        """GET; `query` = filtros do RTDB (orderBy/equalTo/limitToFirst...), valores ja' em JSON."""
+        return await self._request("GET", path, query=query)
 
     async def put(self, path: str, data: Any) -> None:
         await self._request("PUT", path, data)
