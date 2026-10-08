@@ -1,0 +1,36 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Parear com o AutoDomo",
+        "description": "No app AutoDomo, abra a casa > Pontes > Adicionar e digite aqui o código mostrado (vale 10 minutos).",
+        "data": {
+          "code": "Código de pareamento",
+          "functions_url": "URL das Cloud Functions (avançado)",
+          "database_url": "URL do Realtime Database (avançado, vazio = padrão)",
+          "api_key": "Chave Web do Firebase (avançado)",
+          "auth_emulator_host": "Host do emulador de Auth (avançado, ex.: 127.0.0.1:9099)"
+        }
+      }
+    },
+    "error": {
+      "invalid_code": "Código inválido ou já usado. Gere outro no app.",
+      "expired_code": "Código expirado. Gere outro no app.",
+      "cannot_connect": "Não foi possível falar com o AutoDomo. Verifique a internet e tente de novo."
+    },
+    "abort": {
+      "already_configured": "Esta ponte já está configurada."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Entidades visíveis no app",
+        "description": "Escolha o que o app AutoDomo pode ver e controlar. Só entidades de domínios suportados aparecem.",
+        "data": {
+          "entities": "Entidades"
+        }
+      }
+    }
+  }
+}
