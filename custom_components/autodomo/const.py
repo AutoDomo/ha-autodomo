@@ -51,7 +51,7 @@ AUTO_DOMAINS: tuple[str, ...] = ("light", "switch", "cover", "climate", "lock", 
 
 STATE_DEBOUNCE_S = 0.3
 HEARTBEAT_INTERVAL_S = 30
-COMMAND_MAX_AGE_S = 30
+COMMAND_MAX_AGE_S = 120  # comandos da fila offline do app sobem ate 2 min depois
 STREAM_RETRY_MIN_S = 2
 STREAM_RETRY_MAX_S = 60
 
