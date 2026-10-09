@@ -1,7 +1,9 @@
 {
   "domain": "autodomo",
   "name": "AutoDomo",
-  "codeowners": ["@eltonssilva"],
+  "codeowners": [
+    "@eltonssilva"
+  ],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/AutoDomo/ha-autodomo",
@@ -9,5 +11,5 @@
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/AutoDomo/ha-autodomo/issues",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.1.1"
 }
