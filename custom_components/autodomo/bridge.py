@@ -369,7 +369,9 @@ class AutodomoBridge:
             await asyncio.sleep(HEARTBEAT_INTERVAL_S)
 
     def _on_auth_failed(self, err: Exception | None = None) -> None:
-        if self.auth_failed:
+        # Ponte ja' parada (reload/reauth): uma escrita em voo com o token
+        # antigo pode dar 401 depois - nao e' motivo pra pedir reauth de novo.
+        if self.auth_failed or self._stopped.is_set():
             return
         self.auth_failed = True
         _LOGGER.warning(
