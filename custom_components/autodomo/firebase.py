@@ -30,6 +30,11 @@ class FirebaseAuthError(FirebaseError):
     """Token recusado: a ponte foi revogada ou o refresh token expirou."""
 
 
+class StreamTokenExpired(FirebaseError):
+    """O RTDB encerrou o stream porque o ID token (1 h) venceu - NAO e' revogacao:
+    renova o token e reconecta."""
+
+
 class CallableError(FirebaseError):
     """Cloud Function devolveu erro (status = codigo gRPC em texto)."""
 
@@ -212,7 +217,8 @@ class FirebaseClient:
         """Escuta `path` por SSE ate' ser cancelado ou o servidor encerrar.
 
         on_event(event, subpath, data) para `put`/`patch`. Levanta
-        FirebaseAuthError em `auth_revoked`/401 e FirebaseError em `cancel`
+        StreamTokenExpired em `auth_revoked` (token venceu: renovar e reabrir),
+        FirebaseAuthError em 401 e FirebaseError em `cancel`
         ou queda de conexao - quem chama decide o backoff.
         """
         url, params = await self._db_url(path)
@@ -249,7 +255,9 @@ class FirebaseClient:
         if event == "keep-alive":
             return
         if event == "auth_revoked":
-            raise FirebaseAuthError("stream: auth_revoked")
+            # Enviado quando o ID token usado pra abrir o stream vence (1 h).
+            # Revogacao de verdade aparece depois, no refresh (TOKEN_EXPIRED etc.).
+            raise StreamTokenExpired("stream: token do stream venceu")
         if event == "cancel":
             raise FirebaseError(f"stream: cancelado pelo servidor ({data[:100]})")
         if event in ("put", "patch"):

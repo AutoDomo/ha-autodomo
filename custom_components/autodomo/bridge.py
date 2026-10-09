@@ -30,7 +30,7 @@ from .const import (
     STREAM_RETRY_MAX_S,
     STREAM_RETRY_MIN_S,
 )
-from .firebase import FirebaseAuthError, FirebaseClient, FirebaseError
+from .firebase import FirebaseAuthError, FirebaseClient, FirebaseError, StreamTokenExpired
 from .mapping import device_id_for, device_payload, entity_id_for, service_for_command, state_payload
 
 _LOGGER = logging.getLogger(__name__)
@@ -292,9 +292,30 @@ class AutodomoBridge:
             try:
                 await self.client.stream(self._commands_path(), self._on_command_event)
                 delay = STREAM_RETRY_MIN_S
+            except StreamTokenExpired:
+                # Normal a cada ~1 h: renova o ID token e reabre ja'. So' e'
+                # revogacao se o proprio refresh for recusado.
+                try:
+                    await self.client.refresh()
+                except FirebaseAuthError as err:
+                    self._on_auth_failed(err)
+                    return
+                except FirebaseError as err:
+                    _LOGGER.debug("refresh falhou (%s), tentando de novo", err)
+                    await asyncio.sleep(STREAM_RETRY_MIN_S)
+                _LOGGER.debug("token do stream renovado, reconectando")
+                delay = STREAM_RETRY_MIN_S
+                continue
             except FirebaseAuthError as err:
-                self._on_auth_failed(err)
-                return
+                # 401 ao abrir: pode ser so' token velho - confirma com um refresh.
+                try:
+                    await self.client.refresh()
+                    continue
+                except FirebaseAuthError:
+                    self._on_auth_failed(err)
+                    return
+                except FirebaseError:
+                    pass
             except FirebaseError as err:
                 _LOGGER.debug("stream de comandos caiu (%s), reconectando em %ss", err, delay)
             except asyncio.CancelledError:
