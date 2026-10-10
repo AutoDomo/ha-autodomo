@@ -4,13 +4,13 @@ Leve seus dispositivos do Home Assistant para o app **AutoDomo** — controle em
 tempo real, várias pessoas na mesma casa, sem abrir porta nem expor o HA na
 internet. O Home Assistant vira uma *ponte* da sua casa no AutoDomo.
 
-[![Abrir no HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=AutoDomo&repository=ha-autodomo&category=integration)
+[![Abrir no HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=autodomo-oss&repository=ha-autodomo&category=integration)
 [![Adicionar integração](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=autodomo)
 
 ## Instalar em 3 passos
 
 1. **HACS** → clique no botão *Abrir no HACS* acima (ou *Repositórios
-   personalizados* → `AutoDomo/ha-autodomo`, categoria *Integration*) →
+   personalizados* → `autodomo-oss/ha-autodomo`, categoria *Integration*) →
    *Baixar* → reinicie o Home Assistant.
 2. No **app AutoDomo**, abra a casa → **Pontes → Adicionar Home Assistant**.
    Aparece um código de 8 letras (vale 10 minutos, uso único).
